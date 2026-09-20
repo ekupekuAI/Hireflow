@@ -40,6 +40,7 @@ export function Layout({
   const updateSettings = useStore((s) => s.updateSettings)
   const trace = useStore((s) => s.trace)
   const live = settings.useLive && settings.apiKey.trim()
+  const engineBadge = settings.useMl ? 'Python ML' : live ? 'Live AI' : 'Demo mode'
 
   const runningCount = trace.filter((t) => t.status === 'running').length
 
@@ -60,8 +61,8 @@ export function Layout({
             </div>
           </button>
 
-          <Badge variant={live ? 'success' : 'secondary'} className="ml-1">
-            {live ? 'Live AI' : 'Demo mode'}
+          <Badge variant={settings.useMl || live ? 'success' : 'secondary'} className="ml-1">
+            {engineBadge}
           </Badge>
 
           {/* Nav */}

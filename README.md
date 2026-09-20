@@ -83,14 +83,19 @@ which fully works on any resume you paste or upload.
              React + Tailwind + shadcn-style UI
 ```
 
-Two interchangeable providers behind one interface (`AgentProvider`):
+Three interchangeable engines behind one interface (`AgentProvider`), selected in Settings
+(priority: Python ML → Live Claude → local Demo; each degrades gracefully to the local engine):
 
-| Provider | File | What it does |
+| Engine | Where | What it does |
 |---|---|---|
-| **Demo** (default) | `src/lib/agent/demo.ts` | A real local heuristic engine — extract, match, score, cite. Works offline on any input. |
-| **Live** | `src/lib/agent/claude.ts` | Calls Claude via the Anthropic SDK for higher-quality reasoning, with automatic fallback to the local engine. |
+| **Python ML** | `backend/` (FastAPI-style Flask) | A real **scikit-learn** model — TF-IDF vectorization + cosine similarity for semantic resume↔JD matching, with best-sentence retrieval as cited evidence. Runs offline, no API key. |
+| **Demo** (default) | `src/lib/agent/demo.ts` | A local TypeScript heuristic engine — extract, match, score, cite. Works with zero setup. |
+| **Live** | `src/lib/agent/claude.ts` | Calls Claude via the Anthropic SDK for LLM-grade reasoning, with automatic fallback. |
 
-**Tech:** Vite · React · TypeScript · Tailwind CSS · Zustand · framer-motion · lucide-react · **Supabase** (Postgres) · `@anthropic-ai/sdk` · jsPDF (lazy-loaded).
+**Tech:** Vite · React · TypeScript · Tailwind CSS · Zustand · framer-motion · lucide-react ·
+**Supabase** (Postgres) · **Python + scikit-learn** (ML backend) · `@anthropic-ai/sdk` · jsPDF (lazy-loaded).
+
+**Python ML backend:** see [`backend/README.md`](backend/README.md) — `pip install -r requirements.txt && python app.py`, then enable **Settings → Python ML engine**.
 
 ## ☁️ Cloud persistence (Supabase) — already wired
 

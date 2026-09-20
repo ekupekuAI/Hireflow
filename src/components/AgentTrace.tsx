@@ -9,6 +9,7 @@ export function AgentTrace({ open, onClose }: { open: boolean; onClose: () => vo
   const audit = useStore((s) => s.audit)
   const settings = useStore((s) => s.settings)
   const live = settings.useLive && settings.apiKey.trim()
+  const engineTag = settings.useMl ? 'python-ml · tf-idf' : live ? `live · ${settings.model}` : 'local engine'
 
   return (
     <AnimatePresence>
@@ -28,7 +29,7 @@ export function AgentTrace({ open, onClose }: { open: boolean; onClose: () => vo
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-primary" />
                 <h2 className="font-semibold">Agent activity</h2>
-                <Badge variant={live ? 'success' : 'secondary'}>{live ? `live · ${settings.model}` : 'local engine'}</Badge>
+                <Badge variant={settings.useMl || live ? 'success' : 'secondary'}>{engineTag}</Badge>
               </div>
               <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>

@@ -127,7 +127,7 @@ export interface AuditEntry {
 
 // ---------- Provider abstraction ----------
 
-export type ProviderMode = 'demo' | 'live'
+export type ProviderMode = 'demo' | 'live' | 'ml'
 
 export interface AgentProvider {
   mode: ProviderMode

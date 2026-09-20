@@ -87,6 +87,12 @@ HireFlow is an **agentic** recruiting assistant that keeps the human in charge:
 
 ## 🧱 Tech (one slide)
 
-Vite + React + TypeScript + Tailwind · Zustand · Supabase (Postgres) · Anthropic Claude (with a local
-fallback engine) · deployable to Vercel/Netlify. Clean provider abstraction so live AI and the local
-engine are interchangeable.
+Vite + React + TypeScript + Tailwind · Zustand · Supabase (Postgres) · **Python + scikit-learn ML
+backend** (TF-IDF + cosine semantic matching with evidence retrieval) · Anthropic Claude (optional LLM
+upgrade) · deployable to Vercel/Netlify. Clean provider abstraction — Python ML, live LLM, and a local
+engine are interchangeable, each degrading gracefully.
+
+**If asked "is there a real ML model?"** → Yes: a scikit-learn TF-IDF + cosine-similarity matcher
+served from a Python (Flask) backend. It semantically matches each requirement to the best resume
+sentence and returns that as cited evidence. Verified end-to-end (frontend → Python → scored results).
+It's not a black-box LLM wrapper; the LLM is an optional upgrade.

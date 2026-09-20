@@ -10,8 +10,9 @@ import type {
   PoolAnswer,
   TraceStep,
 } from './types'
-import { getProvider } from './agent'
+import { getProvider, DEFAULT_ML_URL } from './agent'
 import { DEFAULT_MODEL } from './agent/claude'
+import type { ProviderMode } from './types'
 import { toBlindCandidate } from './blind'
 import { SAMPLE_CANDIDATES, SAMPLE_JOB } from '@/data/sampleData'
 import { uid, sleep, stringToHue } from './utils'
@@ -50,10 +51,19 @@ export interface PoolMessage {
 }
 
 export interface Settings {
+  useMl: boolean
+  mlApiUrl: string
   useLive: boolean
   apiKey: string
   model: string
   theme: 'dark' | 'light'
+}
+
+/** Human-readable engine label for the audit trail. */
+export function engineLabel(mode: ProviderMode, settings: Settings): string {
+  if (mode === 'ml') return 'python-ml (tf-idf)'
+  if (mode === 'live') return settings.model
+  return 'local-engine'
 }
 
 interface State {
@@ -148,7 +158,7 @@ export const useStore = create<State>()(
       cloudBusy: false,
       savedId: null,
 
-      settings: { useLive: false, apiKey: '', model: DEFAULT_MODEL, theme: 'dark' },
+      settings: { useMl: false, mlApiUrl: import.meta.env.VITE_ML_API_URL || DEFAULT_ML_URL, useLive: false, apiKey: '', model: DEFAULT_MODEL, theme: 'dark' },
 
       loadSample: () => {
         set({
@@ -213,7 +223,7 @@ export const useStore = create<State>()(
             type: 'JD analysis',
             summary: `Extracted ${structured.mustHaves.length} required skills`,
             inputsUsed: [job.title],
-            model: isDemo ? 'local-engine' : settings.model,
+            model: engineLabel(provider.mode, settings),
           })
 
           const updatedJob = { ...job, structured }
@@ -239,7 +249,7 @@ export const useStore = create<State>()(
               type: 'Candidate score',
               summary: `${c.name} scored ${score.overall}/100 with ${score.dimensions.reduce((n, d) => n + d.evidence.length, 0)} cited snippets`,
               inputsUsed: [`${c.name} resume`, job.title],
-              model: isDemo ? 'local-engine' : settings.model,
+              model: engineLabel(provider.mode, settings),
             })
 
             // In demo mode, compute the blind score immediately (fast + local).
@@ -359,7 +369,7 @@ export const useStore = create<State>()(
           type: 'Interview kit',
           summary: `Generated ${kit.questions.length} questions for ${c.name}`,
           inputsUsed: [`${c.name} resume`, `${c.name} score`],
-          model: provider.mode === 'demo' ? 'local-engine' : settings.model,
+          model: engineLabel(provider.mode, settings),
         })
       },
 
@@ -377,7 +387,7 @@ export const useStore = create<State>()(
             type: 'Pool query',
             summary: question,
             inputsUsed: ans.citations.map((c) => c.candidateName),
-            model: provider.mode === 'demo' ? 'local-engine' : settings.model,
+            model: engineLabel(provider.mode, settings),
           })
         } finally {
           set({ poolBusy: false })
@@ -398,7 +408,7 @@ export const useStore = create<State>()(
           type: 'Evaluation',
           summary: `${c.name}: ${ev.recommendation}`,
           inputsUsed: [`${c.name} resume`, 'interview notes'],
-          model: provider.mode === 'demo' ? 'local-engine' : settings.model,
+          model: engineLabel(provider.mode, settings),
         })
       },
 

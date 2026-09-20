@@ -55,8 +55,10 @@ function aliasRe(alias: string): RegExp {
   let re = _reCache.get(key)
   if (!re) {
     const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    // Boundary chars exclude letters, digits and skill punctuation (+ # / .)
-    re = new RegExp(`(^|[^a-z0-9+#/.])${esc}([^a-z0-9+#/.]|$)`, 'i')
+    // Match as a whole token: boundaries are non-alphanumeric, so "aws" matches
+    // "AWS." and "AWS)" but not "awsome"; "node.js" still matches (its dot is
+    // inside the alias, not a boundary).
+    re = new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`, 'i')
     _reCache.set(key, re)
   }
   return re
