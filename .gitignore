@@ -3,6 +3,12 @@ node_modules
 .pnp
 .pnp.js
 
+# Python (api/ ML backend)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
 # Build output
 dist
 dist-ssr

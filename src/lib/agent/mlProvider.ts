@@ -11,7 +11,10 @@ import type {
 } from '@/lib/types'
 import { _sync } from './demo'
 
-export const DEFAULT_ML_URL = 'http://localhost:8077'
+// Production (Vercel) → same-origin serverless function at /api. Dev → local backend.
+// Override either with VITE_ML_API_URL.
+export const DEFAULT_ML_URL =
+  import.meta.env.VITE_ML_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:8077')
 
 /**
  * Talks to the Python scikit-learn backend (backend/app.py). Each method calls

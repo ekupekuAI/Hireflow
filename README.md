@@ -88,14 +88,14 @@ Three interchangeable engines behind one interface (`AgentProvider`), selected i
 
 | Engine | Where | What it does |
 |---|---|---|
-| **Python ML** | `backend/` (FastAPI-style Flask) | A real **scikit-learn** model — TF-IDF vectorization + cosine similarity for semantic resume↔JD matching, with best-sentence retrieval as cited evidence. Runs offline, no API key. |
+| **Python ML** | `api/` (Flask; Vercel serverless) | A real **scikit-learn** model — TF-IDF vectorization + cosine similarity for semantic resume↔JD matching, with best-sentence retrieval as cited evidence. Runs offline, no API key. |
 | **Demo** (default) | `src/lib/agent/demo.ts` | A local TypeScript heuristic engine — extract, match, score, cite. Works with zero setup. |
 | **Live** | `src/lib/agent/claude.ts` | Calls Claude via the Anthropic SDK for LLM-grade reasoning, with automatic fallback. |
 
 **Tech:** Vite · React · TypeScript · Tailwind CSS · Zustand · framer-motion · lucide-react ·
 **Supabase** (Postgres) · **Python + scikit-learn** (ML backend) · `@anthropic-ai/sdk` · jsPDF (lazy-loaded).
 
-**Python ML backend:** see [`backend/README.md`](backend/README.md) — `pip install -r requirements.txt && python app.py`, then enable **Settings → Python ML engine**.
+**Python ML backend:** see [`api/README.md`](api/README.md). Local: `pip install -r api/requirements.txt && python api/index.py` (serves `http://localhost:8077`), then enable **Settings → Python ML engine**. On Vercel it deploys automatically as a serverless function at `/api` (same project, same origin).
 
 ## ☁️ Cloud persistence (Supabase) — already wired
 
@@ -113,8 +113,13 @@ If the table or keys are missing, the app silently falls back to local-only mode
 npm run build   # → dist/
 ```
 
-Deploy `dist/` as a static site. Set two env vars in your host (from your Supabase
-project's API settings): `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+On **Vercel**, importing this repo deploys **both** the Vite frontend *and* the Python ML model:
+`api/index.py` is picked up as a serverless function (deps from `api/requirements.txt`) and served at
+`/api` on the same origin (see `vercel.json`). No separate backend host, no CORS. Then turn on
+**Settings → Python ML engine** on the live site — its URL defaults to `/api` in production.
+
+Set two env vars in your host (from your Supabase project's API settings):
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 **Hardening for real production:** move the Claude key off the browser into a **Supabase Edge
 Function** proxy (holds `ANTHROPIC_API_KEY` server-side), add **Supabase Auth** for recruiter

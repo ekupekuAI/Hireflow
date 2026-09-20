@@ -30,7 +30,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             <label className="text-sm font-medium">ML backend URL</label>
             <Input value={settings.mlApiUrl} onChange={(e) => updateSettings({ mlApiUrl: e.target.value })} placeholder="http://localhost:8077" />
             <p className="text-xs text-muted-foreground">
-              Start it with <code>python app.py</code> in <code>/backend</code>. If unreachable, the app falls back to the local engine.
+              Local: run <code>python api/index.py</code>. On Vercel it's already live at <code>/api</code>. If unreachable, the app falls back to the local engine.
             </p>
           </div>
         )}

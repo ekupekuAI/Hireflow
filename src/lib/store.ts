@@ -158,7 +158,7 @@ export const useStore = create<State>()(
       cloudBusy: false,
       savedId: null,
 
-      settings: { useMl: false, mlApiUrl: import.meta.env.VITE_ML_API_URL || DEFAULT_ML_URL, useLive: false, apiKey: '', model: DEFAULT_MODEL, theme: 'dark' },
+      settings: { useMl: false, mlApiUrl: DEFAULT_ML_URL, useLive: false, apiKey: '', model: DEFAULT_MODEL, theme: 'dark' },
 
       loadSample: () => {
         set({
