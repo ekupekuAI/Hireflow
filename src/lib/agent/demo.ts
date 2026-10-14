@@ -99,14 +99,21 @@ function analyzeJobSync(job: Job): JobStructured {
   const text = job.rawText
   const lower = text.toLowerCase()
 
+  // Section headers can appear in any order (e.g. "About the role" before
+  // "Required"), so each section runs until the next header that follows it.
   const reqStart = lower.search(/required|must have|qualifications/)
   const niceStart = lower.search(/nice to have|preferred|bonus/)
-  const respStart = lower.search(/responsibilities|what you.ll do|the role/)
+  const respStart = lower.search(/responsibilities|what you.ll do/)
+  const starts = [reqStart, niceStart, respStart].filter((n) => n >= 0)
+  const section = (start: number): string => {
+    if (start < 0) return ''
+    const next = starts.filter((n) => n > start)
+    return text.slice(start, next.length ? Math.min(...next) : undefined)
+  }
 
-  const requiredText =
-    reqStart >= 0 ? text.slice(reqStart, niceStart >= 0 ? niceStart : respStart >= 0 ? respStart : undefined) : text
-  const niceText = niceStart >= 0 ? text.slice(niceStart, respStart >= 0 ? respStart : undefined) : ''
-  const respText = respStart >= 0 ? text.slice(respStart) : ''
+  const requiredText = reqStart >= 0 ? section(reqStart) : text
+  const niceText = section(niceStart)
+  const respText = section(respStart)
 
   const mustHaves = detectSkills(requiredText)
   const niceToHaves = detectSkills(niceText).filter((s) => !mustHaves.includes(s))
@@ -288,18 +295,26 @@ function askPoolSync(job: Job, candidates: Candidate[], question: string): PoolA
 
 function evaluateSync(job: Job, candidate: Candidate, notes: string): Evaluation {
   const jd = job.structured ?? analyzeJobSync(job)
-  const haystack = `${candidate.rawText}\n${notes}`.toLowerCase()
+  // Judge notes sentence by sentence (whole-word alias match) so that
+  // "Did not demonstrate Kubernetes" counts against the requirement, and "go"
+  // no longer matches "good".
+  const sentences = notes.split(/(?<=[.!?;])\s+|\n+/).map((s) => s.trim()).filter(Boolean)
+  const NEGATION = /\b(not|no|never|didn'?t|couldn'?t|lacks?|lacking|weak|unable|without|unclear|struggled)\b/i
 
   const mapped = jd.mustHaves.map((req) => {
     const aliases = SKILL_ALIASES[req] ?? [req.toLowerCase()]
-    const inNotes = aliases.some((a) => notes.toLowerCase().includes(a))
-    const inResume = aliases.some((a) => haystack.includes(a))
-    const met: 'yes' | 'partial' | 'no' = inNotes ? 'yes' : inResume ? 'partial' : 'no'
-    const evidence = inNotes
-      ? findSnippet(notes, req) || 'Mentioned in interview notes'
-      : inResume
-        ? findSnippet(candidate.rawText, req) || 'On resume, not confirmed in interview'
-        : 'No evidence found'
+    const mentions = sentences.filter((s) => aliases.some((a) => textHasAlias(s, a)))
+    const positive = mentions.find((s) => !NEGATION.test(s))
+    const negative = mentions.find((s) => NEGATION.test(s))
+    const inResume = aliases.some((a) => textHasAlias(candidate.rawText, a))
+    const met: 'yes' | 'partial' | 'no' = positive ? 'yes' : inResume ? 'partial' : 'no'
+    const evidence = positive
+      ? positive.slice(0, 220)
+      : negative
+        ? `Interview: ${negative.slice(0, 200)}`
+        : inResume
+          ? findSnippet(candidate.rawText, req) || 'On resume, not confirmed in interview'
+          : 'No evidence found'
     return { requirement: req, evidence, met }
   })
 

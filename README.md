@@ -64,7 +64,7 @@ in seconds. Zero setup, no API key required (it ships with a local engine).
 ### Turn on real Claude AI (optional)
 
 Click the ⚙️ **Settings** gear → toggle **Live AI** → paste an Anthropic API key and pick a
-model (defaults to Claude Opus 5). Without a key, HireFlow runs its **local Demo engine**,
+model (defaults to Claude Opus 5.5). Without a key, HireFlow runs its **local Demo engine**,
 which fully works on any resume you paste or upload.
 
 ## 🧩 Architecture
@@ -101,11 +101,20 @@ Three interchangeable engines behind one interface (`AgentProvider`), selected i
 
 Every screening is saved to **Supabase Postgres** and reloadable from the setup screen. Setup is 3 steps:
 
-1. **Create the table.** Open your Supabase project → **SQL Editor** → paste [`supabase/schema.sql`](supabase/schema.sql) → **Run**. (One `screenings` table + RLS policies.)
-2. **Add your keys** to `.env` (copy `.env.example`): your Supabase URL + publishable key from the project's API settings. Never commit real keys — `.env` is gitignored.
-3. **Done** — run a screening; it appears under "Recent screenings" and persists across reloads/devices.
+1. **Create the table.** Open your Supabase project → **SQL Editor** → paste [`supabase/schema.sql`](supabase/schema.sql) → **Run**. (One `screenings` table, owned per user, with RLS scoped to `auth.uid()`. Re-running it upgrades the old public table.)
+2. **Enable anonymous sign-ins:** Authentication → Sign In / Providers → **Allow anonymous sign-ins**. Each browser gets its own private workspace — nobody else can list, open or delete its screenings.
+3. **Add your keys** to `.env` (copy `.env.example`): your Supabase URL + anon/publishable key from Project Settings → API. Never commit real keys — `.env` is gitignored.
+4. **Done** — run a screening; it appears under "Recent screenings", and interview kits / evaluations you add later are saved into it too.
 
-If the table or keys are missing, the app silently falls back to local-only mode — it never breaks.
+If the table, keys or anonymous sign-in are missing, the app keeps working locally and shows a short notice explaining what to enable.
+
+| Env var | Required | Where to get it |
+|---|---|---|
+| `VITE_SUPABASE_URL` | for cloud save | Supabase → Project Settings → API → Project URL |
+| `VITE_SUPABASE_ANON_KEY` | for cloud save | Supabase → Project Settings → API → anon / publishable key |
+| `VITE_ML_API_URL` | no | Only to override the ML backend URL (defaults: `http://localhost:8077` dev, `/api` prod) |
+
+The Anthropic key for Live AI is entered per user in ⚙️ Settings (stored in that browser only) — it is deliberately not an env var, because `VITE_*` values ship in the public bundle.
 
 ## 🚀 Deploy (Vercel / Netlify)
 
@@ -122,8 +131,19 @@ Set two env vars in your host (from your Supabase project's API settings):
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 **Hardening for real production:** move the Claude key off the browser into a **Supabase Edge
-Function** proxy (holds `ANTHROPIC_API_KEY` server-side), add **Supabase Auth** for recruiter
-accounts, and scope the RLS policies in `schema.sql` to `auth.uid()`.
+Function** proxy (holds `ANTHROPIC_API_KEY` server-side), and swap anonymous sign-in for real
+recruiter accounts (email / SSO) so a workspace follows the user across devices.
+
+## 🔧 Fixes in this version
+
+- **Data isolation:** saved screenings (candidate PII) were readable and deletable by anyone holding the public anon key. Rows are now owned per user with RLS on `auth.uid()` (anonymous auth per browser).
+- **Blind Mode leaks:** the candidate detail, Compare, Evaluate and Ask-the-Pool views showed real names, unredacted resumes and non-blind scores. They now stay blinded.
+- **JD parsing:** when "About the role" came before "Required", nice-to-have skills came out empty and every bullet was treated as a responsibility. Sections are now split correctly.
+- **Interview evaluation:** "Did not demonstrate X" was marked as *Met*, and loose substring matching meant "go" matched "good". Notes are now judged sentence by sentence, with negation and whole-word matching.
+- **Silent failures:** errors were stored but never shown, and Live AI / ML fallbacks were invisible (a bad API key gave no feedback). Both now surface as a dismissible banner; spinners no longer stick on error.
+- **Navigation:** there was no way back to start a new screening, and on phones the nav and Blind toggle were hidden. Added a New-screening button, a mobile nav bar and a header that fits phone widths.
+- **Cloud sync:** kits and evaluations made after a screening were never saved, so reloading lost them.
+- **Misc:** outdated Claude model IDs (old saved settings are migrated); the Python API now loads `ml.py` reliably on Vercel and returns 400 on malformed input instead of 500; removed the unused `VITE_ANTHROPIC_API_KEY`.
 
 ## ⚖️ Responsible use
 

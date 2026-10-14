@@ -10,12 +10,20 @@ A single catch-all keys off the last path segment, so it works under either pref
 ("/score" locally, "/api/score" on Vercel). The model itself lives in ml.py
 (scikit-learn TF-IDF + cosine similarity).
 """
+import os
+import sys
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-import ml
+# Make the sibling ml.py importable regardless of the working directory
+# (Vercel runs functions from the project root, not from api/).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ml  # noqa: E402
 
 app = Flask(__name__)
+# Resumes are plain text; cap request bodies so one call can't exhaust the function.
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 CORS(app)
 
 
@@ -29,7 +37,14 @@ def _dispatch(endpoint):
         })
 
     body = request.get_json(force=True, silent=True) or {}
+    try:
+        return _route(endpoint, body)
+    except (KeyError, TypeError, AttributeError) as e:
+        # Malformed input is the caller's fault: answer 400 instead of crashing with 500.
+        return jsonify({"error": "bad request", "detail": f"missing or invalid field: {e}"}), 400
 
+
+def _route(endpoint, body):
     if endpoint == "analyze-job":
         job = body["job"]
         return jsonify(ml.analyze_job(job.get("title", ""), job["rawText"]))
@@ -55,4 +70,4 @@ def catch_all(path):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8077, debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8077")), debug=False)

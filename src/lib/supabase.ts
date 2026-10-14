@@ -12,8 +12,39 @@ export const isSupabaseConfigured = Boolean(url && key)
 let _client: SupabaseClient | null = null
 function client(): SupabaseClient | null {
   if (!isSupabaseConfigured) return null
-  if (!_client) _client = createClient(url!, key!, { auth: { persistSession: false } })
+  if (!_client) _client = createClient(url!, key!, { auth: { persistSession: true, autoRefreshToken: true } })
   return _client
+}
+
+/**
+ * Screenings hold candidate personal data, so each row is owned by the signed-in
+ * user and RLS only lets that user touch it (supabase/schema.sql). Each browser
+ * gets its own private workspace through Supabase anonymous sign-in.
+ */
+let _user: Promise<string | null> | null = null
+let _authError: string | null = null
+export const getCloudAuthError = () => _authError
+
+async function authed(): Promise<SupabaseClient | null> {
+  const sb = client()
+  if (!sb) return null
+  if (!_user) {
+    _user = (async () => {
+      const { data } = await sb.auth.getSession()
+      if (data.session?.user) return data.session.user.id
+      const { data: signed, error } = await sb.auth.signInAnonymously()
+      if (error || !signed.user) {
+        console.warn('[supabase] anonymous sign-in failed:', error?.message)
+        _authError =
+          'Cloud save is off — enable "Allow anonymous sign-ins" in Supabase → Authentication → Sign In / Providers, then reload.'
+        _user = null
+        return null
+      }
+      _authError = null
+      return signed.user.id
+    })()
+  }
+  return (await _user) ? sb : null
 }
 
 /** Everything needed to restore a screening session. */
@@ -35,7 +66,7 @@ export interface ScreeningRow {
 }
 
 export async function saveScreening(snapshot: ScreeningSnapshot): Promise<string | null> {
-  const sb = client()
+  const sb = await authed()
   if (!sb) return null
   const { data, error } = await sb
     .from('screenings')
@@ -49,8 +80,16 @@ export async function saveScreening(snapshot: ScreeningSnapshot): Promise<string
   return data?.id ?? null
 }
 
+/** Re-save after kits / evaluations are added, so reloading a screening keeps them. */
+export async function updateScreening(id: string, snapshot: ScreeningSnapshot): Promise<void> {
+  const sb = await authed()
+  if (!sb) return
+  const { error } = await sb.from('screenings').update({ data: snapshot }).eq('id', id)
+  if (error) console.warn('[supabase] update failed:', error.message)
+}
+
 export async function listScreenings(): Promise<ScreeningRow[]> {
-  const sb = client()
+  const sb = await authed()
   if (!sb) return []
   const { data, error } = await sb
     .from('screenings')
@@ -65,7 +104,7 @@ export async function listScreenings(): Promise<ScreeningRow[]> {
 }
 
 export async function loadScreening(id: string): Promise<ScreeningSnapshot | null> {
-  const sb = client()
+  const sb = await authed()
   if (!sb) return null
   const { data, error } = await sb.from('screenings').select('data').eq('id', id).single()
   if (error) {
@@ -75,9 +114,13 @@ export async function loadScreening(id: string): Promise<ScreeningSnapshot | nul
   return (data?.data as ScreeningSnapshot) ?? null
 }
 
-export async function deleteScreening(id: string): Promise<void> {
-  const sb = client()
-  if (!sb) return
+export async function deleteScreening(id: string): Promise<boolean> {
+  const sb = await authed()
+  if (!sb) return false
   const { error } = await sb.from('screenings').delete().eq('id', id)
-  if (error) console.warn('[supabase] delete failed:', error.message)
+  if (error) {
+    console.warn('[supabase] delete failed:', error.message)
+    return false
+  }
+  return true
 }

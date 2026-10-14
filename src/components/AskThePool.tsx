@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStore } from '@/lib/store'
+import { useStore, useIdentity } from '@/lib/store'
 import { Avatar, Badge, Button, Card, CardContent, Input, Spinner } from './ui'
 import { MessageSquare, Quote, Send, Sparkles } from 'lucide-react'
 
@@ -16,6 +16,7 @@ export function AskThePool() {
   const askPool = useStore((s) => s.askPool)
   const candidates = useStore((s) => s.candidates)
   const select = useStore((s) => s.select)
+  const identity = useIdentity()
   const [q, setQ] = useState('')
 
   const send = (text: string) => {
@@ -62,9 +63,9 @@ export function AskThePool() {
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sources</p>
                       {m.answer.citations.map((c, j) => (
                         <button key={j} onClick={() => select(c.candidateId)} className="flex w-full items-start gap-2 rounded-md bg-secondary/50 p-2 text-left transition-colors hover:bg-secondary">
-                          <Avatar name={c.candidateName} className="h-6 w-6 text-[10px]" />
+                          <Avatar name={c.candidateName} blinded={identity(c.candidateId, c.candidateName).blinded} className="h-6 w-6 text-[10px]" />
                           <div className="min-w-0">
-                            <div className="text-xs font-medium">{c.candidateName}</div>
+                            <div className="text-xs font-medium">{identity(c.candidateId, c.candidateName).name}</div>
                             <div className="flex gap-1 text-xs text-muted-foreground"><Quote className="mt-0.5 h-3 w-3 shrink-0" /><span className="italic">"{c.snippet}"</span></div>
                           </div>
                         </button>

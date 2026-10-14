@@ -10,6 +10,7 @@ import type {
   CandidateProfile,
 } from '@/lib/types'
 import { _sync } from './demo'
+import { noteFallback } from './fallback'
 
 // Production (Vercel) → same-origin serverless function at /api. Dev → local backend.
 // Override either with VITE_ML_API_URL.
@@ -41,7 +42,7 @@ export function createMlProvider(baseUrl: string = DEFAULT_ML_URL): AgentProvide
       try {
         return await post<JobStructured>('/analyze-job', { job })
       } catch (e) {
-        console.warn('[ml] analyzeJob fell back to local engine:', e)
+        noteFallback('Python ML backend', e)
         return _sync.analyzeJobSync(job)
       }
     },
@@ -50,7 +51,7 @@ export function createMlProvider(baseUrl: string = DEFAULT_ML_URL): AgentProvide
       try {
         return await post<CandidateProfile>('/extract', { candidate })
       } catch (e) {
-        console.warn('[ml] extractResume fell back to local engine:', e)
+        noteFallback('Python ML backend', e)
         return _sync.extractProfile(candidate)
       }
     },
@@ -59,7 +60,7 @@ export function createMlProvider(baseUrl: string = DEFAULT_ML_URL): AgentProvide
       try {
         return await post<CandidateScore>('/score', { job, candidate })
       } catch (e) {
-        console.warn('[ml] scoreCandidate fell back to local engine:', e)
+        noteFallback('Python ML backend', e)
         return _sync.scoreSync(job, candidate)
       }
     },
@@ -68,7 +69,7 @@ export function createMlProvider(baseUrl: string = DEFAULT_ML_URL): AgentProvide
       try {
         return await post<InterviewKit>('/interview-kit', { job, candidate, score })
       } catch (e) {
-        console.warn('[ml] generateInterviewKit fell back to local engine:', e)
+        noteFallback('Python ML backend', e)
         return _sync.interviewKitSync(job, candidate, score)
       }
     },
@@ -77,7 +78,7 @@ export function createMlProvider(baseUrl: string = DEFAULT_ML_URL): AgentProvide
       try {
         return await post<PoolAnswer>('/ask-pool', { job, candidates, question })
       } catch (e) {
-        console.warn('[ml] askPool fell back to local engine:', e)
+        noteFallback('Python ML backend', e)
         return _sync.askPoolSync(job, candidates, question)
       }
     },
@@ -86,7 +87,7 @@ export function createMlProvider(baseUrl: string = DEFAULT_ML_URL): AgentProvide
       try {
         return await post<Evaluation>('/evaluate', { job, candidate, notes })
       } catch (e) {
-        console.warn('[ml] evaluate fell back to local engine:', e)
+        noteFallback('Python ML backend', e)
         return _sync.evaluateSync(job, candidate, notes)
       }
     },

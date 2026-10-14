@@ -13,12 +13,13 @@ import type {
 } from '@/lib/types'
 import * as P from './prompts'
 import { _sync } from './demo'
+import { noteFallback } from './fallback'
 
-export const DEFAULT_MODEL = 'claude-opus-5'
+export const DEFAULT_MODEL = 'claude-opus-5-5'
 export const MODEL_OPTIONS = [
-  { id: 'claude-opus-5', label: 'Claude Opus 5 (most capable)' },
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 (fast)' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fastest)' },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (most capable)' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (fast)' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest)' },
 ]
 
 /** Tolerant JSON extraction from a model response that should be pure JSON. */
@@ -99,7 +100,7 @@ export function createLiveProvider(apiKey: string, model: string = DEFAULT_MODEL
           domain: asArray<string>(r.domain).map(String),
         }
       } catch (e) {
-        console.warn('[live] analyzeJob fell back to local engine:', e)
+        noteFallback('Live AI', e)
         return _sync.analyzeJobSync(job)
       }
     },
@@ -117,7 +118,7 @@ export function createLiveProvider(apiKey: string, model: string = DEFAULT_MODEL
           summary: String(r.summary ?? ''),
         }
       } catch (e) {
-        console.warn('[live] extractResume fell back to local engine:', e)
+        noteFallback('Live AI', e)
         return _sync.extractProfile(candidate)
       }
     },
@@ -127,7 +128,7 @@ export function createLiveProvider(apiKey: string, model: string = DEFAULT_MODEL
         const r = await call(P.SCORE_SYSTEM, P.scoreUser(job, candidate), 2200)
         return normalizeScore(candidate, r)
       } catch (e) {
-        console.warn('[live] scoreCandidate fell back to local engine:', e)
+        noteFallback('Live AI', e)
         return _sync.scoreSync(job, candidate)
       }
     },
@@ -146,7 +147,7 @@ export function createLiveProvider(apiKey: string, model: string = DEFAULT_MODEL
           probeAreas: asArray<string>(r.probeAreas).map(String),
         }
       } catch (e) {
-        console.warn('[live] generateInterviewKit fell back to local engine:', e)
+        noteFallback('Live AI', e)
         return _sync.interviewKitSync(job, candidate, score)
       }
     },
@@ -163,7 +164,7 @@ export function createLiveProvider(apiKey: string, model: string = DEFAULT_MODEL
           })),
         }
       } catch (e) {
-        console.warn('[live] askPool fell back to local engine:', e)
+        noteFallback('Live AI', e)
         return _sync.askPoolSync(job, candidates, question)
       }
     },
@@ -183,7 +184,7 @@ export function createLiveProvider(apiKey: string, model: string = DEFAULT_MODEL
           recommendation: String(r.recommendation ?? ''),
         }
       } catch (e) {
-        console.warn('[live] evaluate fell back to local engine:', e)
+        noteFallback('Live AI', e)
         return _sync.evaluateSync(job, candidate, notes)
       }
     },

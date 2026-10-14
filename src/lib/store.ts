@@ -11,7 +11,8 @@ import type {
   TraceStep,
 } from './types'
 import { getProvider, DEFAULT_ML_URL } from './agent'
-import { DEFAULT_MODEL } from './agent/claude'
+import { DEFAULT_MODEL, MODEL_OPTIONS } from './agent/claude'
+import { takeFallback } from './agent/fallback'
 import type { ProviderMode } from './types'
 import { toBlindCandidate } from './blind'
 import { SAMPLE_CANDIDATES, SAMPLE_JOB } from '@/data/sampleData'
@@ -22,6 +23,8 @@ import {
   loadScreening,
   saveScreening,
   deleteScreening,
+  updateScreening,
+  getCloudAuthError,
   type ScreeningRow,
 } from './supabase'
 
@@ -109,6 +112,7 @@ interface State {
   askPool: (question: string) => Promise<void>
   runEvaluation: (candidateId: string, notes: string) => Promise<void>
   setView: (v: View) => void
+  clearError: () => void
   select: (id: string | null) => void
   toggleCompare: (id: string) => void
   updateSettings: (patch: Partial<Settings>) => void
@@ -127,6 +131,21 @@ function doneTrace(get: () => State, set: (s: Partial<State>) => void, id: strin
 }
 function pushAudit(get: () => State, set: (s: Partial<State>) => void, entry: Omit<AuditEntry, 'id' | 'ts'>) {
   set({ audit: [{ ...entry, id: uid('audit'), ts: Date.now() }, ...get().audit] })
+}
+
+/** Best-effort: push kits / evaluations / audit added after the initial cloud save. */
+function syncCloud(get: () => State) {
+  const s = get()
+  if (!s.savedId || !s.job) return
+  void updateScreening(s.savedId, {
+    job: s.job,
+    candidates: s.candidates,
+    scores: s.scores,
+    blindScores: s.blindScores,
+    kits: s.kits,
+    evaluations: s.evaluations,
+    audit: s.audit,
+  })
 }
 
 export const useStore = create<State>()(
@@ -175,6 +194,7 @@ export const useStore = create<State>()(
           compareIds: [],
           poolMessages: [],
           error: null,
+          savedId: null,
         })
       },
 
@@ -193,6 +213,7 @@ export const useStore = create<State>()(
           compareIds: [],
           poolMessages: [],
           error: null,
+          savedId: null,
         })
       },
 
@@ -201,6 +222,7 @@ export const useStore = create<State>()(
         if (!job || candidates.length === 0) return
         const provider = getProvider(settings)
         const isDemo = provider.mode === 'demo'
+        takeFallback()
 
         set({
           status: 'running',
@@ -266,7 +288,7 @@ export const useStore = create<State>()(
             })
           }
 
-          set({ status: 'done', candidates: nextCandidates })
+          set({ status: 'done', candidates: nextCandidates, error: takeFallback() })
 
           // Persist the screening to Supabase (best-effort; app works without it).
           if (isSupabaseConfigured) {
@@ -283,6 +305,8 @@ export const useStore = create<State>()(
             if (id) {
               set({ savedId: id })
               void get().fetchCloudScreenings()
+            } else if (!get().error) {
+              set({ error: getCloudAuthError() ?? 'Cloud save failed — results are kept in this tab only.' })
             }
           }
         } catch (e: any) {
@@ -302,7 +326,10 @@ export const useStore = create<State>()(
 
       loadCloudScreening: async (id) => {
         const snap = await loadScreening(id)
-        if (!snap) return
+        if (!snap) {
+          set({ error: getCloudAuthError() ?? 'Could not load that screening. It may have been deleted.' })
+          return
+        }
         set({
           job: snap.job,
           candidates: snap.candidates,
@@ -324,7 +351,10 @@ export const useStore = create<State>()(
       },
 
       removeCloudScreening: async (id) => {
-        await deleteScreening(id)
+        if (!(await deleteScreening(id))) {
+          set({ error: 'Could not delete that screening. Check your connection and try again.' })
+          return
+        }
         set({ cloudScreenings: get().cloudScreenings.filter((s) => s.id !== id) })
       },
 
@@ -344,6 +374,9 @@ export const useStore = create<State>()(
             next[c.id] = { ...blind, blindScored: true }
             set({ blindScores: { ...next } })
           }
+          set({ error: takeFallback() ?? get().error })
+        } catch (e: any) {
+          set({ error: e?.message ?? 'Blind re-scoring failed' })
         } finally {
           set({ blindLoading: false })
         }
@@ -362,20 +395,30 @@ export const useStore = create<State>()(
         if (!c || !score) return
         const provider = getProvider(settings)
         const t = pushTrace(get, set, 'Interview-Kit Generator', `Building kit for ${c.name}`)
-        const kit = await provider.generateInterviewKit(job, c, score)
-        set({ kits: { ...get().kits, [candidateId]: kit } })
-        doneTrace(get, set, t, `${kit.questions.length} questions`)
-        pushAudit(get, set, {
-          type: 'Interview kit',
-          summary: `Generated ${kit.questions.length} questions for ${c.name}`,
-          inputsUsed: [`${c.name} resume`, `${c.name} score`],
-          model: engineLabel(provider.mode, settings),
-        })
+        try {
+          const kit = await provider.generateInterviewKit(job, c, score)
+          set({ kits: { ...get().kits, [candidateId]: kit } })
+          doneTrace(get, set, t, `${kit.questions.length} questions`)
+          pushAudit(get, set, {
+            type: 'Interview kit',
+            summary: `Generated ${kit.questions.length} questions for ${c.name}`,
+            inputsUsed: [`${c.name} resume`, `${c.name} score`],
+            model: engineLabel(provider.mode, settings),
+          })
+          set({ error: takeFallback() ?? get().error })
+          syncCloud(get)
+        } catch (e: any) {
+          doneTrace(get, set, t, 'failed')
+          set({ error: e?.message ?? 'Interview kit generation failed' })
+        }
       },
 
       askPool: async (question) => {
-        const { job, candidates, settings } = get()
+        const { job, settings, blindMode } = get()
         if (!job) return
+        // Blind Mode: the engine only sees redacted resumes + neutral labels, so
+        // answers can't name candidates.
+        const candidates = blindMode ? get().candidates.map((c, i) => toBlindCandidate(c, i)) : get().candidates
         const provider = getProvider(settings)
         set({ poolMessages: [...get().poolMessages, { role: 'user', text: question }], poolBusy: true })
         const t = pushTrace(get, set, 'Pool Q&A', question.slice(0, 48))
@@ -383,12 +426,16 @@ export const useStore = create<State>()(
           const ans = await provider.askPool(job, candidates, question)
           set({ poolMessages: [...get().poolMessages, { role: 'agent', text: ans.answer, answer: ans }] })
           doneTrace(get, set, t, `${ans.citations.length} citations`)
+          set({ error: takeFallback() ?? get().error })
           pushAudit(get, set, {
             type: 'Pool query',
             summary: question,
             inputsUsed: ans.citations.map((c) => c.candidateName),
             model: engineLabel(provider.mode, settings),
           })
+        } catch (e: any) {
+          doneTrace(get, set, t, 'failed')
+          set({ error: e?.message ?? 'Pool query failed' })
         } finally {
           set({ poolBusy: false })
         }
@@ -401,18 +448,26 @@ export const useStore = create<State>()(
         if (!c) return
         const provider = getProvider(settings)
         const t = pushTrace(get, set, 'Evaluator', `Evaluating ${c.name}`)
-        const ev = await provider.evaluate(job, c, notes)
-        set({ evaluations: { ...get().evaluations, [candidateId]: ev } })
-        doneTrace(get, set, t, ev.recommendation)
-        pushAudit(get, set, {
-          type: 'Evaluation',
-          summary: `${c.name}: ${ev.recommendation}`,
-          inputsUsed: [`${c.name} resume`, 'interview notes'],
-          model: engineLabel(provider.mode, settings),
-        })
+        try {
+          const ev = await provider.evaluate(job, c, notes)
+          set({ evaluations: { ...get().evaluations, [candidateId]: ev } })
+          doneTrace(get, set, t, ev.recommendation)
+          pushAudit(get, set, {
+            type: 'Evaluation',
+            summary: `${c.name}: ${ev.recommendation}`,
+            inputsUsed: [`${c.name} resume`, 'interview notes'],
+            model: engineLabel(provider.mode, settings),
+          })
+          set({ error: takeFallback() ?? get().error })
+          syncCloud(get)
+        } catch (e: any) {
+          doneTrace(get, set, t, 'failed')
+          set({ error: e?.message ?? 'Evaluation failed' })
+        }
       },
 
       setView: (v) => set({ view: v }),
+      clearError: () => set({ error: null }),
       select: (id) => set({ selectedId: id, view: id ? 'candidate' : get().view }),
       toggleCompare: (id) => {
         const cur = get().compareIds
@@ -437,11 +492,33 @@ export const useStore = create<State>()(
           status: 'idle',
           poolMessages: [],
           error: null,
+          savedId: null,
         }),
     }),
     {
       name: 'hireflow-settings',
+      version: 2,
       partialize: (s) => ({ settings: s.settings }) as any,
+      // v1 stored model ids that no longer exist (e.g. "claude-opus-5").
+      migrate: (persisted: any) => {
+        const settings = persisted?.settings
+        if (settings && !MODEL_OPTIONS.some((m) => m.id === settings.model)) settings.model = DEFAULT_MODEL
+        return persisted
+      },
     },
   ),
 )
+
+/**
+ * Name / avatar to show for a candidate. In Blind Mode every screen uses the same
+ * neutral label as the shortlist, so opening a candidate can't undo the blinding.
+ */
+export function useIdentity() {
+  const blindMode = useStore((s) => s.blindMode)
+  const candidates = useStore((s) => s.candidates)
+  return (id: string, realName: string) => {
+    if (!blindMode) return { name: realName, blinded: false }
+    const i = candidates.findIndex((c) => c.id === id)
+    return { name: `Candidate #${String((i < 0 ? 0 : i) + 1).padStart(2, '0')}`, blinded: true }
+  }
+}

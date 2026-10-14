@@ -28,6 +28,8 @@ export function SetupScreen() {
   const fetchCloudScreenings = useStore((s) => s.fetchCloudScreenings)
   const loadCloudScreening = useStore((s) => s.loadCloudScreening)
   const removeCloudScreening = useStore((s) => s.removeCloudScreening)
+  const setView = useStore((s) => s.setView)
+  const hasResults = useStore((s) => Object.keys(s.scores).length > 0)
 
   useEffect(() => {
     if (supabaseReady) void fetchCloudScreenings()
@@ -69,6 +71,11 @@ export function SetupScreen() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
+      {hasResults && (
+        <Button variant="ghost" size="sm" onClick={() => setView('dashboard')}>
+          ← Back to current shortlist
+        </Button>
+      )}
       {/* Hero */}
       <div className="pt-6 text-center">
         <Badge className="mb-4"><Sparkles className="h-3 w-3" /> AI recruiting agent</Badge>

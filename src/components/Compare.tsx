@@ -1,11 +1,15 @@
-import { useStore } from '@/lib/store'
+import { useStore, useIdentity } from '@/lib/store'
 import { Avatar, Badge, Button, Card, CardContent, ScoreRing, Empty } from './ui'
 import { cn } from '@/lib/utils'
 import { GitCompare, X } from 'lucide-react'
 
 export function Compare() {
   const candidates = useStore((s) => s.candidates)
-  const scores = useStore((s) => s.scores)
+  const normalScores = useStore((s) => s.scores)
+  const blindScores = useStore((s) => s.blindScores)
+  const blindMode = useStore((s) => s.blindMode)
+  const identity = useIdentity()
+  const scores = blindMode && Object.keys(blindScores).length ? blindScores : normalScores
   const compareIds = useStore((s) => s.compareIds)
   const toggleCompare = useStore((s) => s.toggleCompare)
   const select = useStore((s) => s.select)
@@ -35,16 +39,18 @@ export function Compare() {
         <Button variant="outline" onClick={() => setView('dashboard')}>Back to shortlist</Button>
       </div>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0,1fr))` }}>
-        {cols.map(({ c, s }) => (
+      <div className={cn('grid gap-4', cols.length === 3 ? 'md:grid-cols-3' : 'sm:grid-cols-2')}>
+        {cols.map(({ c, s }) => {
+          const who = identity(c.id, c.name)
+          return (
           <Card key={c.id}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
-                <Avatar name={c.name} className="h-11 w-11 text-sm" />
+                <Avatar name={c.name} blinded={who.blinded} className="h-11 w-11 text-sm" />
                 <button onClick={() => toggleCompare(c.id)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               </div>
-              <h3 className="mt-2 font-semibold">{c.name}</h3>
-              <p className="truncate text-xs text-muted-foreground">{c.profile?.roles[0]}</p>
+              <h3 className="mt-2 font-semibold">{who.name}</h3>
+              {!who.blinded && <p className="truncate text-xs text-muted-foreground">{c.profile?.roles[0]}</p>}
               <div className="my-3 flex justify-center">
                 <ScoreRing score={s.overall} size={64} />
               </div>
@@ -52,7 +58,7 @@ export function Compare() {
 
               <div className="mt-4 space-y-2">
                 {dimNames.map((dn) => {
-                  const d = s.dimensions.find((x) => x.name === dn)!
+                  const d = s.dimensions.find((x) => x.name === dn) ?? { score: 0 }
                   const isBest = d.score === best(dn)
                   return (
                     <div key={dn}>
@@ -78,7 +84,8 @@ export function Compare() {
               <Button size="sm" className="mt-4 w-full" onClick={() => select(c.id)}>View detail</Button>
             </CardContent>
           </Card>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

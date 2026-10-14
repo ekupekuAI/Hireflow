@@ -12,6 +12,7 @@ import {
   Users,
   Eye,
   EyeOff,
+  Plus,
 } from 'lucide-react'
 
 const NAV: { view: View; label: string; icon: React.ElementType }[] = [
@@ -34,6 +35,7 @@ export function Layout({
   const setView = useStore((s) => s.setView)
   const status = useStore((s) => s.status)
   const hasData = useStore((s) => Object.keys(s.scores).length > 0)
+  const onSetup = useStore((s) => !s.job || s.view === 'setup')
   const blindMode = useStore((s) => s.blindMode)
   const setBlindMode = useStore((s) => s.setBlindMode)
   const settings = useStore((s) => s.settings)
@@ -55,18 +57,18 @@ export function Layout({
                 <path d="M9 22V10m0 6h8m0-6v12m5-14-3 3 3 3" />
               </svg>
             </div>
-            <div className="text-left leading-none">
+            <div className="hidden text-left leading-none min-[400px]:block">
               <div className="text-[15px] font-bold tracking-tight">HireFlow</div>
               <div className="hidden text-[11px] text-muted-foreground sm:block">shows its work</div>
             </div>
           </button>
 
-          <Badge variant={settings.useMl || live ? 'success' : 'secondary'} className="ml-1">
+          <Badge variant={settings.useMl || live ? 'success' : 'secondary'} className="ml-1 hidden sm:inline-flex">
             {engineBadge}
           </Badge>
 
           {/* Nav */}
-          {hasData && (
+          {hasData && !onSetup && (
             <nav className="ml-2 hidden items-center gap-1 md:flex">
               {NAV.map((n) => (
                 <button
@@ -86,13 +88,21 @@ export function Layout({
             </nav>
           )}
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {hasData && (
-              <div className="hidden items-center gap-2 rounded-lg border border-border px-3 py-1.5 sm:flex">
+              <div className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 sm:px-3">
                 {blindMode ? <EyeOff className="h-4 w-4 text-primary" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
-                <span className="text-sm font-medium">Blind</span>
+                <span className="hidden text-sm font-medium sm:inline">Blind</span>
                 <Switch checked={blindMode} onCheckedChange={setBlindMode} />
               </div>
+            )}
+
+            {hasData && !onSetup && (
+              <Tooltip label="New screening">
+                <Button variant="outline" size="icon" onClick={() => setView('setup')} aria-label="New screening">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </Tooltip>
             )}
 
             {status !== 'idle' && (
@@ -122,6 +132,27 @@ export function Layout({
           </div>
         </div>
       </header>
+
+      {/* Below md the header nav is hidden — keep every view reachable on phones. */}
+      {hasData && !onSetup && (
+        <nav className="sticky top-16 z-30 flex gap-1 overflow-x-auto border-b border-border bg-background/90 px-4 py-2 backdrop-blur-md md:hidden">
+          {NAV.map((n) => (
+            <button
+              key={n.view}
+              onClick={() => setView(n.view)}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                view === n.view || (view === 'candidate' && n.view === 'dashboard')
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground',
+              )}
+            >
+              <n.icon className="h-4 w-4" />
+              {n.label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <main className="mx-auto max-w-[1400px] px-4 py-6">{children}</main>
     </div>

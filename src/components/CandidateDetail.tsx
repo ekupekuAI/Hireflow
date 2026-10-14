@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useStore } from '@/lib/store'
+import { useStore, useIdentity } from '@/lib/store'
+import { blindCandidate } from '@/lib/blind'
 import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, ScoreRing, Spinner, Empty } from './ui'
 import type { DimensionScore } from '@/lib/types'
 import { cn, escapeRegExp, formatTime } from '@/lib/utils'
@@ -62,7 +63,10 @@ function highlight(text: string, snippets: string[]) {
 export function CandidateDetail() {
   const selectedId = useStore((s) => s.selectedId)
   const candidates = useStore((s) => s.candidates)
-  const scores = useStore((s) => s.scores)
+  const normalScores = useStore((s) => s.scores)
+  const blindScores = useStore((s) => s.blindScores)
+  const blindMode = useStore((s) => s.blindMode)
+  const identity = useIdentity()
   const kits = useStore((s) => s.kits)
   const audit = useStore((s) => s.audit)
   const job = useStore((s) => s.job)
@@ -73,6 +77,8 @@ export function CandidateDetail() {
   const [tab, setTab] = useState<Tab>('overview')
   const [kitBusy, setKitBusy] = useState(false)
 
+  // Blind Mode: show the blind score, neutral label and redacted resume.
+  const scores = blindMode && selectedId && blindScores[selectedId] ? blindScores : normalScores
   const candidate = candidates.find((c) => c.id === selectedId)
   const score = selectedId ? scores[selectedId] : undefined
   const kit = selectedId ? kits[selectedId] : undefined
@@ -84,11 +90,17 @@ export function CandidateDetail() {
   )
 
   if (!candidate || !score) return null
+  const who = identity(candidate.id, candidate.name)
+  const resumeText = who.blinded ? blindCandidate(candidate, candidates.indexOf(candidate)).text : candidate.rawText
+  const anon = (t: string) => (who.blinded ? t.split(candidate.name).join(who.name) : t)
 
   const onGenerateKit = async () => {
     setKitBusy(true)
-    await generateKit(candidate.id)
-    setKitBusy(false)
+    try {
+      await generateKit(candidate.id)
+    } finally {
+      setKitBusy(false)
+    }
     setTab('kit')
   }
 
@@ -107,7 +119,7 @@ export function CandidateDetail() {
       }
     }
     line('HireFlow — Interview Kit', 16, true)
-    line(`${candidate.name} · ${job?.title ?? ''}`, 11)
+    line(`${who.name} · ${job?.title ?? ''}`, 11)
     line(`Overall match: ${score.overall}/100`, 11)
     y += 4
     kit.questions.forEach((q, i) => {
@@ -116,7 +128,7 @@ export function CandidateDetail() {
       q.followUps.forEach((f) => line(`   ↳ ${f}`, 10))
       y += 2
     })
-    doc.save(`HireFlow-${candidate.name.replace(/\s+/g, '_')}-interview-kit.pdf`)
+    doc.save(`HireFlow-${who.name.replace(/[^\w-]+/g, '_')}-interview-kit.pdf`)
   }
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
@@ -135,10 +147,10 @@ export function CandidateDetail() {
       {/* Header */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-4 p-5">
-          <Avatar name={candidate.name} className="h-14 w-14 text-lg" />
+          <Avatar name={candidate.name} blinded={who.blinded} className="h-14 w-14 text-lg" />
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold">{candidate.name}</h1>
-            <p className="text-sm text-muted-foreground">{candidate.profile?.roles[0] ?? candidate.profile?.summary}</p>
+            <h1 className="text-xl font-bold">{who.name}</h1>
+            {!who.blinded && <p className="text-sm text-muted-foreground">{candidate.profile?.roles[0] ?? candidate.profile?.summary}</p>}
             <div className="mt-2 flex flex-wrap gap-1.5">
               {candidate.profile?.skills.slice(0, 6).map((s) => <Badge key={s} variant="secondary">{s}</Badge>)}
             </div>
@@ -151,13 +163,13 @@ export function CandidateDetail() {
       </Card>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-1 overflow-x-auto border-b border-border">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              'flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
               tab === t.id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
@@ -206,7 +218,7 @@ export function CandidateDetail() {
           {!kit ? (
             <div className="flex flex-col items-center gap-3 py-10">
               <ListChecks className="h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Generate a tailored interview kit for {candidate.name}.</p>
+              <p className="text-sm text-muted-foreground">Generate a tailored interview kit for {who.name}.</p>
               <Button onClick={onGenerateKit} disabled={kitBusy}>
                 {kitBusy ? <><Spinner /> Generating…</> : <><Sparkles className="h-4 w-4" /> Generate interview kit</>}
               </Button>
@@ -245,7 +257,7 @@ export function CandidateDetail() {
             <CardTitle className="text-sm">Resume — highlighted spans are cited as evidence</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{highlight(candidate.rawText, snippets)}</pre>
+            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{highlight(resumeText, snippets)}</pre>
           </CardContent>
         </Card>
       )}
@@ -256,9 +268,9 @@ export function CandidateDetail() {
             <div key={a.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
               <Badge variant="outline">{a.type}</Badge>
               <div className="flex-1">
-                <p className="text-sm">{a.summary}</p>
+                <p className="text-sm">{anon(a.summary)}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Inputs: {a.inputsUsed.join(', ')} · {a.model} · {formatTime(a.ts)}
+                  Inputs: {a.inputsUsed.map(anon).join(', ')} · {a.model} · {formatTime(a.ts)}
                 </p>
               </div>
             </div>

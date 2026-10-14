@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStore } from '@/lib/store'
+import { useStore, useIdentity } from '@/lib/store'
 import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Textarea, Spinner } from './ui'
 import { cn } from '@/lib/utils'
 import { CircleCheck, CircleAlert, CircleMinus, ClipboardCheck, Download, HelpCircle, Sparkles } from 'lucide-react'
@@ -15,6 +15,7 @@ export function Evaluate() {
   const scores = useStore((s) => s.scores)
   const evaluations = useStore((s) => s.evaluations)
   const runEvaluation = useStore((s) => s.runEvaluation)
+  const identity = useIdentity()
 
   const ranked = [...candidates].filter((c) => scores[c.id]).sort((a, b) => scores[b.id].overall - scores[a.id].overall)
   const [selId, setSelId] = useState<string>(ranked[0]?.id ?? '')
@@ -23,12 +24,16 @@ export function Evaluate() {
 
   const evalResult = selId ? evaluations[selId] : undefined
   const candidate = candidates.find((c) => c.id === selId)
+  const who = candidate ? identity(candidate.id, candidate.name) : null
 
   const run = async () => {
     if (!selId) return
     setBusy(true)
-    await runEvaluation(selId, notes)
-    setBusy(false)
+    try {
+      await runEvaluation(selId, notes)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const recTone = (r: string) => (/advance|next round/i.test(r) ? 'success' : /do not|reject/i.test(r) ? 'danger' : 'warning')
@@ -41,7 +46,7 @@ export function Evaluate() {
     : []
 
   const exportReport = async () => {
-    if (!evalResult || !candidate) return
+    if (!evalResult || !candidate || !who) return
     const { jsPDF } = await import('jspdf')
     const doc = new jsPDF()
     let y = 16
@@ -55,7 +60,7 @@ export function Evaluate() {
       }
     }
     line('HireFlow — Interview Evaluation', 16, true)
-    line(candidate.name, 12)
+    line(who.name, 12)
     line(`Recommendation: ${evalResult.recommendation}`, 11, true)
     y += 2
     line('Summary', 12, true)
@@ -71,7 +76,7 @@ export function Evaluate() {
       line('Recommended follow-ups', 12, true)
       followUps.forEach((f) => line(`- ${f}`, 10))
     }
-    doc.save(`HireFlow-${candidate.name.replace(/\s+/g, '_')}-evaluation.pdf`)
+    doc.save(`HireFlow-${who.name.replace(/[^\w-]+/g, '_')}-evaluation.pdf`)
   }
 
   return (
@@ -92,7 +97,7 @@ export function Evaluate() {
                   onClick={() => setSelId(c.id)}
                   className={cn('flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors', selId === c.id ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary')}
                 >
-                  <Avatar name={c.name} className="h-5 w-5 text-[9px]" /> {c.name}
+                  <Avatar name={c.name} blinded={identity(c.id, c.name).blinded} className="h-5 w-5 text-[9px]" /> {identity(c.id, c.name).name}
                 </button>
               ))}
             </div>
@@ -106,17 +111,17 @@ export function Evaluate() {
               className="min-h-[140px]"
             />
           </div>
-          <Button onClick={run} disabled={!selId || busy}>
+          <Button onClick={run} disabled={!selId || busy || !notes.trim()}>
             {busy ? <><Spinner /> Evaluating…</> : <><Sparkles className="h-4 w-4" /> Generate evaluation</>}
           </Button>
         </CardContent>
       </Card>
 
-      {evalResult && candidate && (
+      {evalResult && candidate && who && (
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle>{candidate.name} — evaluation</CardTitle>
+              <CardTitle>{who.name} — evaluation</CardTitle>
               <div className="flex items-center gap-2">
                 <Badge variant={recTone(evalResult.recommendation)}>{evalResult.recommendation}</Badge>
                 <Button variant="outline" size="sm" onClick={exportReport}>
