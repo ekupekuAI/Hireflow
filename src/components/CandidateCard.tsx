@@ -32,7 +32,7 @@ export function CandidateCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       className={cn(
-        'group flex items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:border-primary/50',
+        'group flex flex-wrap items-center gap-3 sm:flex-nowrap sm:gap-4 rounded-xl border bg-card p-4 transition-colors hover:border-primary/50',
         compareActive ? 'border-primary' : 'border-border',
       )}
     >
@@ -49,7 +49,7 @@ export function CandidateCard({
 
       <Avatar name={candidate.name} blinded={blinded} className="h-11 w-11 text-sm" />
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-[calc(100%-170px)] sm:basis-auto">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold">{displayName}</span>
           {score.confidence < 0.6 && <Badge variant="warning">low confidence</Badge>}
@@ -81,11 +81,11 @@ export function CandidateCard({
 
       <ScoreRing score={score.overall} size={54} />
 
-      <div className="flex shrink-0 flex-col gap-1.5">
-        <Button size="sm" onClick={onView}>
+      <div className="flex w-full shrink-0 gap-1.5 sm:w-auto sm:flex-col">
+        <Button size="sm" onClick={onView} className="flex-1 sm:flex-none">
           View <ChevronRight className="h-3.5 w-3.5" />
         </Button>
-        <Button size="sm" variant={compareActive ? 'primary' : 'outline'} onClick={onToggleCompare}>
+        <Button size="sm" variant={compareActive ? 'primary' : 'outline'} onClick={onToggleCompare} className="flex-1 sm:flex-none">
           {compareActive ? <Check className="h-3.5 w-3.5" /> : <GitCompare className="h-3.5 w-3.5" />} Compare
         </Button>
       </div>
